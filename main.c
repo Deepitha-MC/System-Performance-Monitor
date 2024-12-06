@@ -6,11 +6,11 @@
  * CS 238P - Operating Systems
  * main.c
  */
-
 #include <signal.h>
 #include "system.h"
 
 static volatile int done;
+
 /**
  * Signal handler for SIGINT that sets a flag to exit the main loop.
  */
@@ -74,7 +74,7 @@ cpu_util(const char *s)
  * 
  * @param interface Pointer to the string containing the network interface name.
  */
-void network_stats(char *interface) {
+void network_stats() {
     const char *const PROC_NET_DEV = "/proc/net/dev";
     FILE *net_file;
     char line[1024];
@@ -90,8 +90,8 @@ void network_stats(char *interface) {
     /* Skip the first two lines, which contain headers. */ 
 	for (i = 0; i < 2; ++i) {
 		if (fgets(line, sizeof(line), net_file) == NULL) {
-			fclose(net_file);
 			TRACE("Error reading file header");
+			fclose(net_file);
 			return;
 		}
 	}
@@ -104,14 +104,14 @@ void network_stats(char *interface) {
         /* Extract interface name and statistics. */ 
         if (sscanf(line, "%31s %lu %*u %*u %*u %*u %*u %*u %*u %lu", iface, &r_bytes, &t_bytes) == 3) {
 			/* Accumulate statistics only for the specified interface. */
-			if(strcmp(iface, interface) == 0) {
-				received_bytes += r_bytes;
-            	transmitted_bytes += t_bytes;
-			}
+			received_bytes += r_bytes;
+			transmitted_bytes += t_bytes;
         }
     }
 
-    fclose(net_file);
+    if (fclose(net_file) != 0) {
+        TRACE("Error closing network file");
+    }
 
     /* Print the total transmitted and received data. */ 
     printf(" | Total Received Bytes: %lu | Total Transmitted Bytes: %lu", received_bytes, transmitted_bytes);
@@ -134,10 +134,15 @@ void uptime_stats() {
 	
 	/* Parse uptime and idle time from the file. */
 	while (fgets(line, sizeof(line), uptime_file)) {
-        sscanf(line, "%f %f", &uptime, &idle_time);
+        if (sscanf(line, "%f %f", &uptime, &idle_time) != 2) {
+            TRACE("Error parsing uptime data");
+        }
 	}
 
-	fclose(uptime_file);
+    if (fclose(uptime_file) != 0) {
+        TRACE("Error closing uptime file");
+    }
+
 	printf(" | Total Uptime: %5.1fs | Idle Time: %5.1fs", uptime, idle_time);
 }
 
@@ -159,10 +164,15 @@ void loadavg_stats() {
 
 	/* Parse active processes, total processes, and recent PID. */
 	while (fgets(line, sizeof(line), loadavg_file)) {
-        sscanf(line, "%*f %*f %*f %d/%d %d", &active_proc, &total_proc, &recent_pid);
+        if (sscanf(line, "%*f %*f %*f %d/%d %d", &active_proc, &total_proc, &recent_pid) != 3) {
+            TRACE("Error parsing loadavg data");
+        }
 	}
 
-	fclose(loadavg_file);
+    if (fclose(loadavg_file) != 0) {
+        TRACE("Error closing load average file");
+    }
+
 	printf(" | Active/Total Processes: %d/%d | Recent PID: %d", active_proc, total_proc, recent_pid);
 }
 
@@ -196,11 +206,15 @@ main(int argc, char *argv[])
 		if (fgets(line, sizeof(line), file)) {
 			printf("\rCPU Utilization: %5.1f%%", cpu_util(line));
 			fflush(stdout);
-		}
-		fclose(file);
+		} else {
+            TRACE("Error reading CPU stats");
+        }
+        if (fclose(file) != 0) {
+            TRACE("Error closing /proc/stat file");
+        }
 		
 		/* Gather and display other system stats. */
-		network_stats("lo:");
+		network_stats();
 		loadavg_stats();
 		uptime_stats();
 		
